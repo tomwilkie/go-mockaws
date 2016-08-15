@@ -3,14 +3,14 @@ package mockaws
 import (
 	"bytes"
 	"fmt"
+	"log"
 	"sort"
 	"sync"
 
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/prometheus/common/log"
 )
 
-type mockDynamoDB struct {
+type MockDynamoDB struct {
 	mtx    sync.RWMutex
 	tables map[string]mockDynamoDBTable
 }
@@ -23,13 +23,13 @@ type mockDynamoDBTable struct {
 
 type mockDynamoDBItem map[string]*dynamodb.AttributeValue
 
-func newMockDynamoDB() *mockDynamoDB {
-	return &mockDynamoDB{
+func NewMockDynamoDB() *MockDynamoDB {
+	return &MockDynamoDB{
 		tables: map[string]mockDynamoDBTable{},
 	}
 }
 
-func (m *mockDynamoDB) CreateTable(input *dynamodb.CreateTableInput) (*dynamodb.CreateTableOutput, error) {
+func (m *MockDynamoDB) CreateTable(input *dynamodb.CreateTableInput) (*dynamodb.CreateTableOutput, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -51,7 +51,7 @@ func (m *mockDynamoDB) CreateTable(input *dynamodb.CreateTableInput) (*dynamodb.
 	return &dynamodb.CreateTableOutput{}, nil
 }
 
-func (m *mockDynamoDB) ListTables(*dynamodb.ListTablesInput) (*dynamodb.ListTablesOutput, error) {
+func (m *MockDynamoDB) ListTables(*dynamodb.ListTablesInput) (*dynamodb.ListTablesOutput, error) {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
@@ -66,7 +66,7 @@ func (m *mockDynamoDB) ListTables(*dynamodb.ListTablesInput) (*dynamodb.ListTabl
 	}, nil
 }
 
-func (m *mockDynamoDB) BatchWriteItem(input *dynamodb.BatchWriteItemInput) (*dynamodb.BatchWriteItemOutput, error) {
+func (m *MockDynamoDB) BatchWriteItem(input *dynamodb.BatchWriteItemInput) (*dynamodb.BatchWriteItemOutput, error) {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -79,7 +79,7 @@ func (m *mockDynamoDB) BatchWriteItem(input *dynamodb.BatchWriteItemInput) (*dyn
 		for _, writeRequest := range writeRequests {
 			hashValue := *writeRequest.PutRequest.Item[table.hashKey].S
 			rangeValue := writeRequest.PutRequest.Item[table.rangeKey].B
-			log.Infof("Write %s/%x", hashValue, rangeValue)
+			log.Printf("Write %s/%x", hashValue, rangeValue)
 
 			items := table.items[hashValue]
 
@@ -99,7 +99,7 @@ func (m *mockDynamoDB) BatchWriteItem(input *dynamodb.BatchWriteItemInput) (*dyn
 	return &dynamodb.BatchWriteItemOutput{}, nil
 }
 
-func (m *mockDynamoDB) Query(input *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+func (m *MockDynamoDB) Query(input *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
 	m.mtx.RLock()
 	defer m.mtx.RUnlock()
 
@@ -122,13 +122,13 @@ func (m *mockDynamoDB) Query(input *dynamodb.QueryInput) (*dynamodb.QueryOutput,
 	var found []mockDynamoDBItem
 	rangeKeyCondition, ok := input.KeyConditions[table.rangeKey]
 	if !ok {
-		log.Infof("Lookup %s/* -> *", hashValue)
+		log.Printf("Lookup %s/* -> *", hashValue)
 		found = items
 	} else {
 		rangeValueStart := rangeKeyCondition.AttributeValueList[0].B
 		rangeValueEnd := rangeKeyCondition.AttributeValueList[1].B
 
-		log.Infof("Lookup %s/%x -> %x (%d)", hashValue, rangeValueStart, rangeValueEnd, len(items))
+		log.Printf("Lookup %s/%x -> %x (%d)", hashValue, rangeValueStart, rangeValueEnd, len(items))
 
 		i := sort.Search(len(items), func(i int) bool {
 			return bytes.Compare(items[i][table.rangeKey].B, rangeValueStart) >= 0
@@ -138,7 +138,7 @@ func (m *mockDynamoDB) Query(input *dynamodb.QueryInput) (*dynamodb.QueryOutput,
 			return bytes.Compare(items[i][table.rangeKey].B, rangeValueEnd) > 0
 		})
 
-		log.Infof("  found range [%d:%d]", i, j)
+		log.Printf("  found range [%d:%d]", i, j)
 		if i > len(items) || i == j {
 			return &dynamodb.QueryOutput{}, nil
 		}
