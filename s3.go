@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"sync"
-
+        "github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/s3"
 )
 
@@ -57,7 +57,7 @@ func (m *MockS3) GetObject(input *s3.GetObjectInput) (*s3.GetObjectOutput, error
 
 	buf, ok := bucket.objects[*input.Key]
 	if !ok {
-		return nil, fmt.Errorf("not found")
+		return nil, awserr.New(s3.ErrCodeNoSuchKey, "not found", nil)
 	}
 
 	return &s3.GetObjectOutput{
